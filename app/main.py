@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from app.constants.fastapi_doc import fastapi_data
 from app.schemas.healthcheck import HealthCheck
+from app.routers import voice
 
 app = FastAPI(
     title=fastapi_data["title"],
@@ -20,3 +21,4 @@ def get_healthcheck() -> HealthCheck:
     return HealthCheck()
 
 app.add_api_route("/health", get_healthcheck, methods=["GET"], tags=["Healthcheck"], response_model=HealthCheck, summary="Teste o status da API")
+app.include_router(voice.router, prefix="/voice", tags=["Voicer"])
