@@ -1,9 +1,10 @@
 [project]
-name = "tca-voicechat"
-version = "0.1.0"
-description = "Add your description here"
+name = "tca-voicer"
+version = "1.0.0"
+description = "Microserviço Python que transcreve áudio de reuniões e viabiliza conversa por voz com o chatbot do TCA."
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
     "fastapi[standard]>=0.141.1",
+    "websockets>=17.1",
 ]
