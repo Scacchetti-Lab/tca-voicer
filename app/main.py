@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.constants.fastapi_doc import fastapi_data
+from app.schemas.healthcheck import HealthCheck
 
 app = FastAPI(
     title=fastapi_data["title"],
@@ -11,9 +12,11 @@ app = FastAPI(
     redoc_url=None,
 );
 
-def main():
-    print("Hello from tca-voicechat!")
+@app.get("/", 
+         response_model=HealthCheck, 
+         summary="Teste o status da API",
+         tags=["Healthcheck"])
+def get_healthcheck() -> HealthCheck:
+    return HealthCheck()
 
-
-if __name__ == "__main__":
-    main()
+app.add_api_route("/health", get_healthcheck, methods=["GET"], tags=["Healthcheck"], response_model=HealthCheck, summary="Teste o status da API")
