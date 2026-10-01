@@ -33,7 +33,7 @@ async def voice_chat(audio: UploadFile, background_tasks: BackgroundTasks, env: 
     data = await read_audio(audio, env)
 
 
-@router.post('/webhook/read-audio', status_code=status.HTTP_102_PROCESSING, response_model=JSONResponse)
+@router.post('/webhook/read-audio', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
 async def transcribe_meeeting(audio: UploadFile, background_tasks: BackgroundTasks, env: Annotated[Settings, Depends(get_settings)]) -> JSONResponse:
     ext = Path(audio.filename or '').suffix.lower()
     if ext not in DEFAULT_AUDIO_EXT:
@@ -44,8 +44,8 @@ async def transcribe_meeeting(audio: UploadFile, background_tasks: BackgroundTas
     background_tasks.add_task(read_audio, audio, env)
     return JSONResponse(
         content=BaseResponse(status=
-                             status.HTTP_102_PROCESSING, 
+                             status.HTTP_202_ACCEPTED, 
                              data=None, 
                              message=f'Arquivo {(audio.filename or '.').split('.')[0]} está sendo processado!'),
-        status_code=status.HTTP_102_PROCESSING
+        status_code=status.HTTP_202_ACCEPTED
     )
