@@ -7,5 +7,6 @@ class Settings(BaseSettings):
     whisper_model: str
     callback_urls: str
     webhook_save_path: str
+    vc_webhook_key: str
 
     model_config = SettingsConfigDict(env_file='.env')

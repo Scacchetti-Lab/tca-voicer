@@ -35,17 +35,16 @@ async def voice_chat(audio: UploadFile, background_tasks: BackgroundTasks, env: 
 
 @router.post('/webhook/read-audio', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
 async def transcribe_meeeting(audio: UploadFile, background_tasks: BackgroundTasks, env: Annotated[Settings, Depends(get_settings)]) -> JSONResponse:
-    ext = Path(audio.filename or '').suffix.lower()
+    ext = Path(audio.filename or '').suffix[1:].lower()
     if ext not in DEFAULT_AUDIO_EXT:
-        return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Extensão de arquivo inválida'))
-    if not is_valid_audio_file(audio):
-        return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Arquivo mal formato. Envie outro'))
+        return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Extensão de arquivo inválida').model_dump())
+    if not await is_valid_audio_file(audio):
+        return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Arquivo mal formato. Envie outro').model_dump())
 
     background_tasks.add_task(read_audio, audio, env)
     return JSONResponse(
-        content=BaseResponse(status=
-                             status.HTTP_202_ACCEPTED, 
+        content=BaseResponse(status=status.HTTP_202_ACCEPTED, 
                              data=None, 
-                             message=f'Arquivo {(audio.filename or '.').split('.')[0]} está sendo processado!'),
+                             message=f'Arquivo {(audio.filename or '.').split('.')[0]} está sendo processado!').model_dump(),
         status_code=status.HTTP_202_ACCEPTED
     )
