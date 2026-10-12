@@ -1,4 +1,5 @@
 import logging
+from json import dumps
 
 from fastapi import UploadFile
 from faster_whisper import WhisperModel, BatchedInferencePipeline
@@ -18,6 +19,7 @@ async def read_audio(audio: UploadFile, env: Settings):
     segments, _ = bathced_model.transcribe(
         audio=audio.file,
         batch_size=8,
+        language='pt'
     )
 
     transcript = ''
@@ -29,13 +31,13 @@ async def read_audio(audio: UploadFile, env: Settings):
 async def process_webhook(audio: UploadFile, callback_url: str, job_id: str, env: Settings):
     try:
         transcript = await read_audio(audio, env)
-    
-        resp = httpx.post(
-            callback_url,
-            json={"jobId": job_id, "transcript": transcript},
-            headers={"X-VOICER-SECRET": env.voicer_secret_key},
-            timeout=30,
-        )
-        resp.raise_for_status()
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                callback_url,
+                json={"jobId": job_id, "transcript": transcript},
+                headers={"X-VOICER-SECRET": env.vc_webhook_key},
+            )
+            resp.raise_for_status()
     except Exception:
         log.exception("Falha ao processar o job %s", job_id)

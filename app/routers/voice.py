@@ -1,10 +1,10 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile, BackgroundTasks, status
+from fastapi import APIRouter, Depends, Form, UploadFile, BackgroundTasks, status
 from fastapi.responses import JSONResponse
 from app.dependencies import get_settings
 from app.helpers.voice import is_valid_audio_file
-from app.services.voice import read_audio
+from app.services.voice import process_webhook, read_audio
 from pathlib import Path
 from app.schemas.commons import BaseResponse
 from app.constants.constants import DEFAULT_AUDIO_EXT
@@ -33,15 +33,15 @@ async def voice_chat(audio: UploadFile, background_tasks: BackgroundTasks, env: 
     data = await read_audio(audio, env)
 
 
-@router.post('/webhook/read-audio', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
-async def transcribe_meeeting(audio: UploadFile, background_tasks: BackgroundTasks, env: Annotated[Settings, Depends(get_settings)]) -> JSONResponse:
+@router.post('/meeting/transcript', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
+async def transcribe_meeeting(audio: UploadFile, job_id: Annotated[str, Form()], callback_url: Annotated[str, Form()], background_tasks: BackgroundTasks, env: Annotated[Settings, Depends(get_settings)]) -> JSONResponse:
     ext = Path(audio.filename or '').suffix[1:].lower()
     if ext not in DEFAULT_AUDIO_EXT:
         return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Extensão de arquivo inválida').model_dump())
     if not await is_valid_audio_file(audio):
         return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Arquivo mal formato. Envie outro').model_dump())
 
-    background_tasks.add_task(read_audio, audio, env)
+    background_tasks.add_task(process_webhook, audio,callback_url, job_id, env)
     return JSONResponse(
         content=BaseResponse(status=status.HTTP_202_ACCEPTED, 
                              data=None, 
