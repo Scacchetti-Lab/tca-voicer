@@ -1,10 +1,10 @@
 import logging
-from json import dumps
-
 from fastapi import UploadFile
 from faster_whisper import WhisperModel, BatchedInferencePipeline
+from .qwen import generate_audio
 import httpx
 from app.config import Settings
+from io import BytesIO
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("tca-voicer")
@@ -41,3 +41,15 @@ async def process_webhook(audio: UploadFile, callback_url: str, job_id: str, env
             resp.raise_for_status()
     except Exception:
         log.exception("Falha ao processar o job %s", job_id)
+
+async def process_voicechat(audio: bytes, env: Settings):
+    try:
+        upload_file = UploadFile(file=BytesIO(audio), filename="user_audio.wav")
+        transcript = await read_audio(upload_file, env)
+
+        chat_audio = generate_audio(transcript, env, "sohee")
+
+        return chat_audio.read1()
+    except Exception:
+        log.exception("Falha ao gerar audio")
+        
