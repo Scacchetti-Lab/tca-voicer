@@ -1,10 +1,12 @@
 from re import split
 from httpx import post
 from wave import open
-from fastapi import File
+from pathlib import Path
+import struct
 from io import BytesIO
 from app.config import Settings
 from app.constants.constants import SPEAKERS
+from app.helpers.normalize_prompt import normalize_transcript
 
 """
 Lista de Tarefas
@@ -14,6 +16,9 @@ Lista de Tarefas
 [] Caso algo falhe, retornar o audio padrao e generico
 """
 
+base_path = Path(__file__).resolve().parent
+ryan_error_path = str(base_path / "/app/audios/ryan_error.wav")
+sohee_error_path = str(base_path / "/app/audios/sohee_error.wav")
 
 def splited_blocks(texto, max_chars=300):
     paragraph = texto.strip().split('\n\n')
@@ -38,7 +43,8 @@ def splited_blocks(texto, max_chars=300):
     return blocks
 
 def generate_audio(user_text, env: Settings, speaker: SPEAKERS = "ryan"):
-    blocks = splited_blocks(user_text, max_chars=250)
+    message = normalize_transcript(user_text)
+    blocks = splited_blocks(message, max_chars=250)
     complet_pcm = b""
 
     for b in blocks:
@@ -65,3 +71,8 @@ def generate_audio(user_text, env: Settings, speaker: SPEAKERS = "ryan"):
 
     chat_audio.seek(0)
     return chat_audio
+
+
+def get_error_audio(speaker: SPEAKERS = "ryan"):
+    base_path = sohee_error_path if speaker == "sohee" else ryan_error_path
+    return base_path

@@ -1,44 +1,57 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, UploadFile, BackgroundTasks, WebSocketDisconnect, status, WebSocket
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Form, Query, UploadFile, BackgroundTasks, WebSocketDisconnect, status, WebSocket
+from fastapi.responses import FileResponse, JSONResponse
 from app.dependencies import get_settings
 from app.helpers.voice import is_valid_audio_file
 from app.services.voice import process_webhook, process_voicechat
 from pathlib import Path
 from app.schemas.commons import BaseResponse
-from app.constants.constants import DEFAULT_AUDIO_EXT
+from app.constants.constants import DEFAULT_AUDIO_EXT, SPEAKERS
 from app.config import Settings
 
 router = APIRouter()
 
-
 @router.websocket('/ws/chat')
-async def voice_chat(ws: WebSocket, env: Annotated[Settings, Depends(get_settings)]):
+async def voice_chat(ws: WebSocket, env: Annotated[Settings, Depends(get_settings)],
+                     speaker: Annotated[SPEAKERS, Query()] = "ryan"):
     await ws.accept()
     try:
         while True:
             user_audio = await ws.receive_bytes()
-            chat_audio = await process_voicechat(user_audio, env)
+            response = await process_voicechat(user_audio, speaker, env)
 
-            if not chat_audio:
-                return await ws.send_json(
-                    BaseResponse(status=status.HTTP_409_CONFLICT, data=None, message="")
-                )
-            print(f'Tamanho do chat audio: {len(chat_audio)}')
-            await ws.send_bytes(chat_audio)
+            if response.status != 200 or (response.audio is None or response.chat_content is None):
+                await ws.send_json({"type": "error", "status": response.status, "message": response.message})
+                continue
+
+            await ws.send_json({
+                "type": "text",
+                "title": response.chat_content.title,
+                "transcript": response.transcript,
+                "reply": response.chat_content.reply
+            })
+            await ws.send_bytes(response.audio)
     except WebSocketDisconnect:
         pass
     except Exception:
         import traceback; traceback.print_exc()
-        await ws.send_json(
-            BaseResponse(status=500, data=None, message="Arquivo não processado!").model_dump()
-        )
-        await ws.close(code=1011)
-
+        try:
+            await ws.send_json(BaseResponse(status=500, data=None,
+                                            message="Arquivo não processado!").model_dump())
+            await ws.close(code=1011)
+        except Exception:
+            pass
 
 @router.post('/meeting/transcript', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
-async def transcribe_meeeting(audio: UploadFile, job_id: Annotated[str, Form()], callback_url: Annotated[str, Form()], background_tasks: BackgroundTasks, env: Annotated[Settings, Depends(get_settings)]) -> JSONResponse:
+async def transcribe_meeeting(
+    audio: UploadFile, 
+    job_id: Annotated[str, Form()], 
+    callback_url: Annotated[str, Form()], 
+    background_tasks: BackgroundTasks, 
+    env: Annotated[Settings, Depends(get_settings)]
+) -> JSONResponse:
+    
     ext = Path(audio.filename or '').suffix[1:].lower()
     if ext not in DEFAULT_AUDIO_EXT:
         return JSONResponse(content=BaseResponse(status=status.HTTP_400_BAD_REQUEST, data=None, message='Extensão de arquivo inválida').model_dump())

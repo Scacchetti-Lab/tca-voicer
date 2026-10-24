@@ -8,5 +8,7 @@ class Settings(BaseSettings):
     callback_urls: str
     webhook_save_path: str
     vc_webhook_key: str
+    voxen_url: str
+    voxen_secret_key: str
 
     model_config = SettingsConfigDict(env_file='.env')
