@@ -1,47 +1,52 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Form, Query, UploadFile, BackgroundTasks, WebSocketDisconnect, status, WebSocket
-from fastapi.responses import FileResponse, JSONResponse
+from traceback import format_exc
+from fastapi import APIRouter, Depends, File, Form, UploadFile, BackgroundTasks, status
+from fastapi.sse import EventSourceResponse, ServerSentEvent
+from fastapi.responses import JSONResponse
 from app.dependencies import get_settings
 from app.helpers.voice import is_valid_audio_file
+from app.schemas.sse import BotAudioChunk, ErrorSSE, InteractionId, TextChunk, TitleGenerate
 from app.services.voice import process_webhook, process_voicechat
 from pathlib import Path
-from app.schemas.commons import BaseResponse
+from app.schemas.commons import BaseResponse, VoiceChatRequest
 from app.constants.constants import DEFAULT_AUDIO_EXT, SPEAKERS
 from app.config import Settings
 
 router = APIRouter()
 
-@router.websocket('/ws/chat')
-async def voice_chat(ws: WebSocket, env: Annotated[Settings, Depends(get_settings)],
-                     speaker: Annotated[SPEAKERS, Query()] = "ryan"):
-    await ws.accept()
+@router.post('/chatbot', response_class=EventSourceResponse)
+async def process_chat_request(
+    env: Annotated[Settings, Depends(get_settings)], 
+    audio: UploadFile = File(), 
+    speaker: SPEAKERS = Form(),
+    interact_id: str | None = Form(None)):
     try:
-        while True:
-            user_audio = await ws.receive_bytes()
-            response = await process_voicechat(user_audio, speaker, env)
+        request = VoiceChatRequest(speaker=speaker, interact_id=interact_id)
 
-            if response.status != 200 or (response.audio is None or response.chat_content is None):
-                await ws.send_json({"type": "error", "status": response.status, "message": response.message})
-                continue
+        response = process_voicechat(audio, request, env)
+        interact_id = None
+        async for item in response:
+            match item:
+                case TextChunk(text=text):
+                    yield ServerSentEvent(event="text", data={"text": text})
+                case BotAudioChunk(bot_audio=bot_audio):
+                    yield ServerSentEvent(event="audio", data={"bot_audio": bot_audio})
+                case TitleGenerate(title=title):
+                    yield ServerSentEvent(event="title", data={"title": title})
+                case ErrorSSE(message=message):
+                    yield ServerSentEvent(event="error", data={"message": message})
+                    return
+                case InteractionId(interaction_id=id):
+                    interact_id = id
 
-            await ws.send_json({
-                "type": "text",
-                "title": response.chat_content.title,
-                "transcript": response.transcript,
-                "reply": response.chat_content.reply
-            })
-            await ws.send_bytes(response.audio)
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        import traceback; traceback.print_exc()
-        try:
-            await ws.send_json(BaseResponse(status=500, data=None,
-                                            message="Arquivo não processado!").model_dump())
-            await ws.close(code=1011)
-        except Exception:
-            pass
+        if not interact_id: raise Exception()
+        yield ServerSentEvent(event="done", data={"interaction_id": interact_id})
+    except Exception as ex:
+        print(ex)
+        print(format_exc())
+        yield ServerSentEvent(event="error", data={"message": 'Ocorreu um erro durante o processamento do voicer'})
+
 
 @router.post('/meeting/transcript', status_code=status.HTTP_202_ACCEPTED, response_class=JSONResponse)
 async def transcribe_meeeting(

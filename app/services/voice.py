@@ -1,14 +1,13 @@
 from asyncio import to_thread
 from fastapi import UploadFile
-from app.constants.constants import SPEAKERS
 from app.dependencies import get_whisper
-from app.helpers.normalize_prompt import normalize_transcript
-from app.schemas.commons import VoiceResult
-from .bot import send_message
-from .qwen import generate_audio, get_error_audio
+from app.helpers.voice import format_chunk, to_base64
+from app.schemas.commons import VoiceChatRequest
+from app.schemas.sse import BotAudioChunk, TextChunk
+from .bot import generate_ai_reply
+from .qwen import generate_audio
 import httpx
 from app.config import Settings
-from io import BytesIO
 
 def save_transcripted_file(filename: str, batch: str, path: str):
     with open(f'{path}/{filename}.txt', 'a+') as f:
@@ -37,17 +36,27 @@ async def process_webhook(audio: UploadFile, callback_url: str, job_id: str, env
         )
         resp.raise_for_status()
 
-async def process_voicechat(audio: bytes, speaker: SPEAKERS, env: Settings) -> VoiceResult:
-    upload_file = UploadFile(file=BytesIO(audio), filename="user_audio.wav")
-    transcript = await read_audio(upload_file)
-    result = await send_message(transcript, env)
+async def tts_request(prompt: str, env: Settings, speaker):
+    response = generate_audio(prompt, env, speaker)
+    async for v in response:
+        yield BotAudioChunk(to_base64(v))
 
-    chat_audio = await to_thread(generate_audio, result.data.reply, env, speaker)
-    return VoiceResult(
-        status=result.status,
-        message=result.message,
-        transcript=transcript,
-        chat_content=result.data,
-        audio=chat_audio.read1()
-    )
-        
+async def process_voicechat(audio: UploadFile, request: VoiceChatRequest, env: Settings):
+    transcript = await read_audio(audio)
+    sse_response = generate_ai_reply(transcript, request.interact_id, env)
+
+    raw = ''
+    async for item in sse_response:
+        match item:
+            case TextChunk(text=text):
+                yield item
+                reply, raw = format_chunk(raw + text)
+                
+                for w in reply:
+                    async for chunk in tts_request(w, env, request.speaker):
+                        yield chunk
+            case _:
+                yield item
+    if raw.strip():
+        async for chunk in tts_request(raw.strip(), env, request.speaker):
+            yield chunk

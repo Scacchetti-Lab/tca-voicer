@@ -1,5 +1,6 @@
 from typing import cast
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from httpx import HTTPStatusError
 from pydantic import ValidationError
 from starlette.types import ExceptionHandler
@@ -34,7 +35,14 @@ def get_healthcheck() -> HealthCheck:
     return HealthCheck()
 
 app.add_api_route("/health", get_healthcheck, methods=["GET"], tags=["Healthcheck"], response_model=HealthCheck, summary="Teste o status da API")
-app.include_router(voice.router, prefix="/voice", tags=["Voicer"])
+app.include_router(voice.router, prefix="/v1/voice", tags=["Voicer"])
 app.add_exception_handler(Exception, global_handler)
 app.add_exception_handler(HTTPStatusError, cast(ExceptionHandler, http_exc_handler))
 app.add_exception_handler(ValidationError, cast(ExceptionHandler, validation_handler))
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)

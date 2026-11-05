@@ -1,7 +1,9 @@
+from re import split
 from fastapi import UploadFile
 from filetype import is_audio
 from app.config import Settings
 from urllib.parse import urlparse
+from base64 import b64encode
 
 from app.constants.constants import MP4_AUDIO_BRANDS
 
@@ -26,3 +28,10 @@ async def is_mp4_audio(file: UploadFile) -> bool:
         return False
     finally:
         await file.seek(0)
+
+def to_base64(item: bytes):
+    return b64encode(item).decode('ascii')
+
+def format_chunk(prompt: str):
+    delta = split(r'(?<=[.!?])\s+', prompt)
+    return delta[:-1], delta[-1]

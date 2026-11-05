@@ -1,6 +1,8 @@
 from pydantic import BaseModel
 from typing import Any
 
+from app.constants.constants import SPEAKERS
+
 class BaseResponse(BaseModel):
     status: int
     data: Any
@@ -24,3 +26,7 @@ class VoiceResult(BaseModel):
     transcript: str | None = None   
     chat_content: ChatContent | None = None       
     audio: bytes | None = None
+
+class VoiceChatRequest(BaseModel):
+    speaker: SPEAKERS
+    interact_id: str | None = None
